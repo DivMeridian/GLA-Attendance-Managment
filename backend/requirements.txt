@@ -1,0 +1,14 @@
+insightface 
+opencv-python 
+numpy
+setuptools
+torch
+torchvision
+pymongo
+onnxruntime
+fastapi 
+uvicorn 
+opencv-python-headless 
+numpy
+python-multipart
+twilio
