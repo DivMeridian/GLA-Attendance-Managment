@@ -1,5 +1,6 @@
 insightface 
 opencv-python 
+onnx
 numpy
 setuptools
 torch
