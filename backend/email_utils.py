@@ -1,39 +1,40 @@
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+from azure.communication.email import EmailClient
 from dotenv import load_dotenv
 import os 
 
 load_dotenv()
 
-def send_attendance_email(to_email: str, subject: str, body: str):
+def send_attendance_email(to_email: str, subject: str, plain_text_body: str, html_body: str = None):
     """
-    Sends an email with the specified subject and body to the given recipient.
-    
+    Sends an email using Azure Communication Services EmailClient.
+
     :param to_email: Recipient's email address.
-    :param subject: Subject of the email.
-    :param body: Body content of the email.
+    :param subject: Email subject.
+    :param plain_text_body: Plain text content of the email.
+    :param html_body: HTML content of the email (optional).
     """
     try:
-        # SMTP server configuration
-        smtp_server = "smtp.gmail.com"
-        smtp_port = 587
-        sender_email = os.getenv("SENDER_EMAIL")
-        sender_password = os.getenv("SENDER_PASSWORD")  # Use environment variables for better security
+        # Connection string for Azure Communication Services
+        connection_string = "endpoint=https://ai-mailing.unitedstates.communication.azure.com/;accesskey=AVEVdvPHOzVUMAnXrGlm63cgvVPyWFuTQZLPxCona26mdeiqKif5JQQJ99AKACULyCphD9BDAAAAAZCSycfM"
+        client = EmailClient.from_connection_string(connection_string)
 
-        # Create email message
-        msg = MIMEMultipart()
-        msg["From"] = sender_email
-        msg["To"] = to_email
-        msg["Subject"] = subject
-        msg.attach(MIMEText(body, "plain"))
+        # Email message details
+        message = {
+            "senderAddress": "DoNotReply@onmeridian.com",
+            "recipients": {
+                "to": [{"address": to_email}]
+            },
+            "content": {
+                "subject": subject,
+                "plainText": plain_text_body,
+                "html": html_body or f"<html><body><p>{plain_text_body}</p></body></html>"
+            },
+        }
 
-        # Connect to the SMTP server and send the email
-        with smtplib.SMTP(smtp_server, smtp_port) as server:
-            server.starttls()
-            server.login(sender_email, sender_password)
-            server.sendmail(sender_email, to_email, msg.as_string())
-        
-        print(f"Email sent successfully to {to_email}")
-    except Exception as e:
-        print(f"Failed to send email to {to_email}. Error: {str(e)}")
+        # Send email
+        poller = client.begin_send(message)
+        result = poller.result()
+        return "Email sent successfully"
+
+    except Exception as ex:
+        print(f"Failed to send email to {to_email}: {ex}")

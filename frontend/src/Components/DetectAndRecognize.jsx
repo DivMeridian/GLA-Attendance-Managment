@@ -12,12 +12,14 @@ function DetectAndRecognize() {
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  // const backendURI = 'https://attendance-backend.azurewebsites.net'
+  const backendURI = "http://localhost:8000";
 
   // Fetch available sections from the backend
   useEffect(() => {
     const fetchSections = async () => {
       try {
-        const response = await axios.get("http://localhost:8000/get_sections/");
+        const response = await axios.get(`${backendURI}/get_sections/`);
         setSections(response.data.sections || []);
       } catch (error) {
         console.error("Error fetching sections:", error);
@@ -47,7 +49,7 @@ function DetectAndRecognize() {
         formData.append("file", file); // Use "file" instead of "files"
         formData.append("section", section);
   
-        const response = await axios.post("http://localhost:8000/detect_and_recognize/", formData, {
+        const response = await axios.post(`${backendURI}/detect_and_recognize/`, formData, {
           headers: {
             "Content-Type": "multipart/form-data",
           },
@@ -63,7 +65,7 @@ function DetectAndRecognize() {
       setIdentifiedNames(combinedNames);
   
       // Fetch registered users
-      const usersResponse = await axios.get(`http://localhost:8000/get_registered_users/${section}`);
+      const usersResponse = await axios.get(`${backendURI}/get_registered_users/${section}`);
       setRegisteredUsers(usersResponse.data.registered_users || []);
     } catch (error) {
       if (error.response) {
@@ -99,7 +101,7 @@ function DetectAndRecognize() {
     setLoading(true);
 
     try {
-      await axios.post("http://localhost:8000/submit_attendance/", {
+      await axios.post(`${backendURI}/submit_attendance/`, {
         section,
         attendance,
       });

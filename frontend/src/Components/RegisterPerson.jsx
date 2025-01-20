@@ -6,12 +6,18 @@ function RegisterPerson() {
   const [label, setLabel] = useState("");
   const [contact, setContact] = useState("");
   const [section, setSection] = useState("");
+  const [email, setEmail] = useState("");
+  const [rollNumber, setRollNumber] = useState("");
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  // const backendURI = "https://attendance-backend.azurewebsites.net";
+  const backendURI = "http://localhost:8000";
 
   const validateInputs = () => {
     const phoneRegex = /^[6-9]\d{9}$/; // Validates 10-digit numbers starting with 6-9
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/; // Validates email format
+    const rollNumberRegex = /^\d{10}$/; // Validates a 10-digit roll number
 
     if (!file) return "Please upload an image.";
     if (!label.trim()) return "Name is required.";
@@ -19,6 +25,12 @@ function RegisterPerson() {
       return "Please enter a valid 10-digit mobile number starting with 6, 7, 8, or 9.";
     }
     if (!section.trim()) return "Section is required.";
+    if (!email.trim() || !emailRegex.test(email)) {
+      return "Please enter a valid email address.";
+    }
+    if (!rollNumber.trim() || !rollNumberRegex.test(rollNumber)) {
+      return "Please enter a valid 10-digit university roll number.";
+    }
     return null;
   };
 
@@ -41,13 +53,16 @@ function RegisterPerson() {
     formData.append("label", label);
     formData.append("Contact", contact);
     formData.append("section", section);
+    formData.append("email", email);
+    formData.append("rollNumber", rollNumber);
 
     try {
-      const response = await axios.post("http://localhost:8000/register_person/", formData);
+      const response = await axios.post(`${backendURI}/register_person/`, formData);
       setMessage(response.data.message || "Person registered successfully!");
+      console.log(response.data);
     } catch (error) {
       if (error.response) {
-        setErrorMessage(error.response.data.message || "Failed to register person.");
+        setErrorMessage(error.response.data.detail || "Failed to register person.");
       } else if (error.request) {
         setErrorMessage("No response from server. Please try again later.");
       } else {
@@ -100,6 +115,26 @@ function RegisterPerson() {
             className="mt-1 block w-full border border-gray-300 rounded-md p-2"
             value={section}
             onChange={(e) => setSection(e.target.value)}
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium">Email</label>
+          <input
+            type="email"
+            className="mt-1 block w-full border border-gray-300 rounded-md p-2"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium">University Roll Number</label>
+          <input
+            type="text"
+            className="mt-1 block w-full border border-gray-300 rounded-md p-2"
+            value={rollNumber}
+            onChange={(e) => setRollNumber(e.target.value)}
             required
           />
         </div>

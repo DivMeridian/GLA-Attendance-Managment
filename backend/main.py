@@ -187,12 +187,14 @@ async def submit_attendance(data: dict):
 
                 # Create a message based on attendance status
                 if present:
+                    subject = "Attendance Notification: Present"
                     message = f"Dear {name}, your attendance for section {section} has been marked as Present."
                 else:
+                    subject = "Attendance Notification: Absent"
                     message = f"Dear {name}, your attendance for section {section} has been marked as Absent."
 
                 # Send SMS
-                send_attendance_email(to_email=email_address, subject="Attendance Notification", body=message)
+                send_attendance_email(to_email=email_address, subject=subject, plain_text_body=message)
 
         return {"message": "Attendance submitted successfully!"}
     except Exception as e:
