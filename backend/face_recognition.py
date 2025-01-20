@@ -1,11 +1,15 @@
 import numpy as np
 from pymongo import MongoClient
 from scipy.spatial.distance import cosine
-from twilio_utils import TwilioClient
+from azure.storage.blob import BlobServiceClient
+import cv2
+from dotenv import load_dotenv
+import os
 
+load_dotenv()
 
 class FaceRecognition:
-    def __init__(self, mongo_uri="mongodb://localhost:27017/", db_name="FaceRecognitionDB", collection_name="Embeddings"):
+    def __init__(self, mongo_uri=os.getenv('MONGO_URI'), db_name="AttendanceSystem", collection_name="Embeddings"):
         """
         Initialize MongoDB connection and load embeddings.
         """
@@ -16,11 +20,11 @@ class FaceRecognition:
         self.known_embeddings = []
         self.load_embeddings_from_db()
 
-        # intializing Twilio credentials and client
-        account_sid = 'AC6f69c2558fd39d71e1c080175b36f209'  # Replace with your Account SID
-        auth_token = '0687d6199b11170e5f47a6f4e7ba3b32'    # Replace with your Auth Token
-        twilio_number = '+12317455948'  # Replace with your Twilio number
-        self.twilio_client = TwilioClient(account_sid, auth_token, twilio_number)
+        # Initialize Azure Blob Storage client
+        # Azure Storage Configuration
+        AZURE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+        self.blob_service_client = BlobServiceClient.from_connection_string(AZURE_CONNECTION_STRING)
+        self.container_name = os.getenv("CONTAINER_NAME")
 
 
     def load_embeddings_from_db(self):
@@ -32,8 +36,28 @@ class FaceRecognition:
             self.known_embeddings.append(np.array(doc["embedding"]))
             self.known_labels.append(doc["label"])
         print(f"Loaded {len(self.known_embeddings)} embeddings from MongoDB.")
+    
+    def upload_image_to_azure(self, section, label, image_path):
+        """
+        Upload the image to Azure Blob Storage in the path gla/Section/Registered/label.jpg.
+        """
+        try:
+            blob_path = f"{section}/Registered/{label}.jpg"
+            blob_client = self.blob_service_client.get_blob_client(container=self.container_name, blob=blob_path)
 
-    def register_person(self, frame, face_detector, label,contact,section):
+            with open(image_path, "rb") as data:
+                blob_client.upload_blob(data, overwrite=True)
+
+            # Generate the URL
+            blob_url = f"https://visiondetect.blob.core.windows.net/{self.container_name}/{blob_path}"
+            print(f"Image uploaded successfully. URL: {blob_url}")
+
+            return blob_url
+        except Exception as e:
+            print(f"Error uploading image to Azure: {e}")
+            return False
+
+    def register_person(self, frame, face_detector, label,contact,section,email,rollNumber):
         """
         Register a person by capturing their embedding from the frame.
         :param frame: Input frame containing the face.
@@ -44,8 +68,7 @@ class FaceRecognition:
         """
         detections, embeddings = face_detector.detect_faces(frame)
         if not embeddings:
-            print("No face detected. Please try again.")
-            return
+            return "No face detected. Please try again."
 
         # Assuming a single face for registration
         embedding = embeddings[0]
@@ -59,9 +82,31 @@ class FaceRecognition:
         if existing_person:
             return {f"'{label}' already exists in the '{section}' section."}
         
-        collection.insert_one({"label": label, "embedding": embedding.tolist(),"Contact":contact,"section":section})
+        # Save the face image locally
+        x1, y1, x2, y2 = map(int, detections[0][:4])  # Assuming a single detection
+        cropped_face = frame[y1:y2, x1:x2]
+        local_image_path = f"{label}.jpg"
+        cv2.imwrite(local_image_path, cropped_face)
+
+        # Upload the image to Azure Blob Storage
+        image_url = self.upload_image_to_azure(section, label, local_image_path)
+        if image_url:
+            # Insert person data into the database
+            collection.insert_one({
+                "label": label,
+                "embedding": embedding.tolist(),
+                "Contact": contact,
+                "section": section,
+                "email": email,
+                "rollNumber": rollNumber,
+                "image_url": image_url
+            })
+        
         self.known_embeddings.append(embedding)
         self.known_labels.append(label)
+
+        # Delete the local image file
+        os.remove(local_image_path)
         
         print(f"Registered '{label}' successfully and saved to MongoDB.")
         
@@ -106,4 +151,5 @@ class FaceRecognition:
                 results.append((bbox, label, best_match_score))
             else:
                 results.append((bbox, "Unknown", best_match_score))
+
         return results

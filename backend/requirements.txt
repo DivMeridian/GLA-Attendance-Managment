@@ -13,3 +13,7 @@ opencv-python-headless
 numpy
 python-multipart
 twilio
+python-dotenv
+azure-storage-blob
+smtplib
+email

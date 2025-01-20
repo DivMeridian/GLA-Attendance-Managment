@@ -1,4 +1,5 @@
 from insightface.app import FaceAnalysis
+import os 
 
 ''' RetinaFace uses feature maps with strides of 8, 16, and 32, 
  the input resolution should ideally be divisible by 32. 
@@ -11,8 +12,9 @@ class FaceDetector:
         """
         Initialize the FaceDetector using InsightFace.
         """
-        self.face_app = FaceAnalysis()
+        self.face_app = FaceAnalysis(name="buffalo_l", root="./")
         self.face_app.prepare(ctx_id=-1, det_size=(1280, 1280))  # Adjust det_size as needed
+        print("Models loaded:", self.face_app.models)
 
     def detect_faces(self, frame):
         """

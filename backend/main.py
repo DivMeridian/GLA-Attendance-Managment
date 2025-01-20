@@ -7,8 +7,21 @@ from face_recognition import FaceRecognition
 import numpy as np
 from fastapi.middleware.cors import CORSMiddleware
 import base64
+from azure.storage.blob import BlobServiceClient, ContentSettings
+from dotenv import load_dotenv
+from email_utils import send_attendance_email
+
 
 app = FastAPI()
+load_dotenv()
+
+# Azure Blob Storage configuration
+AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+CONTAINER_NAME = os.getenv("CONTAINER_NAME")
+
+# Initialize Azure Blob Storage client
+blob_service_client = BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING)
+container_client = blob_service_client.get_container_client(CONTAINER_NAME)
 
 # Allow CORS for React to communicate with FastAPI
 app.add_middleware(
@@ -70,27 +83,40 @@ async def detect_and_recognize(file: UploadFile,section:str=Form()):
         draw_bounding_boxes(frame, results)
 
         # Save the processed image
-        result_path = os.path.join("Results", f"processed_{file.filename}")
-        cv2.imwrite(result_path, frame)
+        local_result_path = os.path.join("Results", f"processed_{file.filename}")
+        cv2.imwrite(local_result_path, frame)
+
+        blob_name = f"{section}/recognized_images/processed_{file.filename}"
         
         # Encode the image as a base64 string
         _, buffer = cv2.imencode(".jpg", frame)
         base64_image = base64.b64encode(buffer).decode("utf-8")
 
+        container_client.upload_blob(
+            name=blob_name,
+            data=buffer.tobytes(),
+            content_settings=ContentSettings(content_type="image/jpeg"),
+            overwrite=True
+        )
+
         # Extract identified names from results
         identified_names = [result[1] for result in results]
 
+        # Delete the local image file
+        os.remove(local_result_path)
+
         return {
             "message": "Detection and recognition complete.",
-            "result_path": result_path,
+            "result_path": local_result_path,
             "image_base64": base64_image,
             "identified_names": identified_names,
         }
+    
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
 @app.post("/register_person/")
-async def register_person(file: UploadFile, label: str = Form(...),Contact: int = Form(...),section:str=Form()):
+async def register_person(file: UploadFile, label: str = Form(...),Contact: int = Form(...),section:str=Form(),email:str=Form(),rollNumber:str=Form()):
     """
     Endpoint to register a new person using an image.
     :param file: Uploaded registration image file.
@@ -108,8 +134,12 @@ async def register_person(file: UploadFile, label: str = Form(...),Contact: int 
             raise HTTPException(status_code=400, detail="Failed to process the image. Ensure the file is a valid image.")
 
         # Register the person
-        face_recognition.register_person(frame, face_detector, label,Contact,section)
-        return {"message": f"'{label}' has been successfully registered."}
+        message = face_recognition.register_person(frame, face_detector, label,Contact,section,email,rollNumber)
+
+        if message == "No face detected. Please try again.":  # No face detected
+            raise HTTPException(status_code=400, detail="No face detected. Please try again.")
+        else:
+            return {"message": f"'{label}' has been successfully registered."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
@@ -153,8 +183,7 @@ async def submit_attendance(data: dict):
             # Find the person's contact in the database
             person = collection.find_one({"label": name})
             if person and "Contact" in person:
-                contact_number = person["Contact"]
-                to_number = f"+91{contact_number}"  # Format with country code
+                email_address = person["email"]
 
                 # Create a message based on attendance status
                 if present:
@@ -163,7 +192,7 @@ async def submit_attendance(data: dict):
                     message = f"Dear {name}, your attendance for section {section} has been marked as Absent."
 
                 # Send SMS
-                face_recognition.twilio_client.send_sms(to_number, message)
+                send_attendance_email(to_email=email_address, subject="Attendance Notification", body=message)
 
         return {"message": "Attendance submitted successfully!"}
     except Exception as e:
@@ -184,4 +213,4 @@ async def get_sections():
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="localhost", port=8000)
